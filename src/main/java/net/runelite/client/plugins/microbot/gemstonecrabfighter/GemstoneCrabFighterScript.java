@@ -37,7 +37,6 @@ public class GemstoneCrabFighterScript extends StateMachineScript<GemstoneCrabSt
     static final int CRAB_ID = NpcID.GEMSTONE_CRAB;
     static final int CRAB_REMAINS_ID = NpcID.GEMSTONE_CRAB_REMAINS;
     static final int CRAWL_THROUGH_ID = ObjectID1.CAVE_ROCK02_ENTRANCE01_GEMSTONE;
-    static final WorldPoint OUTSIDE_CAVE = new WorldPoint(1274, 3168, 0);
 
     private final GemstoneCrabFighterConfig config;
     private final SafetyService safety = new SafetyService();
@@ -212,12 +211,12 @@ public class GemstoneCrabFighterScript extends StateMachineScript<GemstoneCrabSt
             routeToEncounter();
             return;
         }
-        boolean reached = Rs2Walker.walkTo(OUTSIDE_CAVE);
-        nextMovementAttemptAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        boolean reached = Rs2Walker.walkTo(new WorldPoint(config.entranceX(), config.entranceY(), config.entrancePlane()));
+        nextMovementAttemptAt = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(config.movementDelayMs());
         if (reached || findCrab() != null || findEntrance() != null) {
             walkFailures = 0;
-        } else if (++walkFailures >= 3) {
-            stop("Cave route failed three times; check blocked tiles or the current location");
+        } else if (++walkFailures >= config.movementAttemptLimit()) {
+            stop("Cave route reached the configured attempt limit; check blocked tiles or the current location");
             return;
         }
         routeToEncounter();
@@ -353,7 +352,7 @@ public class GemstoneCrabFighterScript extends StateMachineScript<GemstoneCrabSt
         if (player.isMoving() || System.nanoTime() < nextMovementAttemptAt) return;
         Rs2TileObjectModel entrance = findEntrance();
         if (entrance == null) {
-            if (++interactionFailures >= 3) stop("No crawl-through available after the kill");
+            if (++interactionFailures >= config.movementAttemptLimit()) stop("No crawl-through available after the kill");
             return;
         }
         if (!dispatchCrawl(entrance)) return;
@@ -362,12 +361,12 @@ public class GemstoneCrabFighterScript extends StateMachineScript<GemstoneCrabSt
     }
 
     private boolean dispatchCrawl(Rs2TileObjectModel entrance) {
-        if (crawlAttempts >= 3) {
-            stop("Crawl-through failed to reach a live crab after three attempts");
+        if (crawlAttempts >= config.movementAttemptLimit()) {
+            stop("Crawl-through reached the configured attempt limit without a live crab");
             return false;
         }
         crawlAttempts++;
-        nextMovementAttemptAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        nextMovementAttemptAt = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(config.movementDelayMs());
         return entrance.click("Crawl-through");
     }
 
@@ -379,8 +378,8 @@ public class GemstoneCrabFighterScript extends StateMachineScript<GemstoneCrabSt
             finalSweepCompleted = false;
             next(GemstoneCrabState.FINDING_CRAB, "Next gemstone crab available");
         } else if (System.nanoTime() >= crabWaitDeadline) {
-            if (crawlAttempts >= 3) {
-                stop("No live crab appeared after three crawl-through attempts");
+            if (crawlAttempts >= config.movementAttemptLimit()) {
+                stop("No live crab appeared within the configured crawl-through attempt limit");
             } else {
                 next(crabDeathObserved || findRemains() != null ? GemstoneCrabState.SWITCHING_CRAB
                                 : findEntrance() == null ? GemstoneCrabState.WALKING_TO_CAVE
@@ -554,6 +553,13 @@ public class GemstoneCrabFighterScript extends StateMachineScript<GemstoneCrabSt
     }
 
     static void validate(GemstoneCrabFighterConfig config) {
+        if (config.movementAttemptLimit() < 1 || config.movementAttemptLimit() > 10
+                || config.movementDelayMs() < 600 || config.movementDelayMs() > 10000
+                || config.entranceX() < 0 || config.entranceX() > 16383
+                || config.entranceY() < 0 || config.entranceY() > 16383
+                || config.entrancePlane() < 0 || config.entrancePlane() > 3) {
+            throw new IllegalArgumentException("Invalid movement limits or entrance coordinates");
+        }
         if (config.lootRadius() < 1 || config.lootRadius() > 20
                 || config.minimumLootValue() < 0
                 || config.minimumLootInterval() < 15

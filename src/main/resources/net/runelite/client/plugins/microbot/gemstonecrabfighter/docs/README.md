@@ -1,11 +1,22 @@
 # Gemstone Crab Fighter
 
 `Gemstone Crab Fighter` is a standalone community plugin for ranged training
-against gemstone crabs. Version 1.3.1 fights crab NPC `14779`, periodically
+against gemstone crabs. Version 1.4.0 fights crab NPC `14779`, periodically
 retrieves rune arrows and valuable ground items, and uses crawl-through object
 `57631` to continue with another crab.
 
 ## Running it
+
+Movement settings (v1.4.0) are editable in the plugin configuration:
+
+- Movement attempt limit: 1–10, default 3; applies to failed outside routes and crawl-through attempts.
+- Movement delay (ms): 600–10000, default 2000; minimum interval between movement attempts.
+- Outside entrance X/Y/plane: defaults 1274/3168/0; used when walking to the cave from outside.
+
+Changes are read during the next relevant action. An already scheduled delay or active walk
+finishes using its previous settings. The configured entrance must be a reachable tile
+near a gemstone-crab entrance; these coordinates do not change room-to-room crawl-throughs.
+Waiting for current movement and protecting room transitions from loot scans remain enabled.
 
 1. Equip the ranged gear and ammunition you want to use.
 2. Start in a gemstone crab room or near the northern entrance at

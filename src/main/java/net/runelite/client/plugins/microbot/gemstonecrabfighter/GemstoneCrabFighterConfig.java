@@ -76,6 +76,31 @@ public interface GemstoneCrabFighterConfig extends Config {
             description = "Seconds to wait for a crab before trying another crawl-through", position = 14)
     default int crabWaitTimeout() { return 15; }
 
+    @Range(min = 1, max = 10)
+    @ConfigItem(keyName = "movementAttemptLimit", name = "Movement attempt limit",
+            description = "Maximum failed route or crawl-through attempts before stopping", position = 15)
+    default int movementAttemptLimit() { return 3; }
+
+    @Range(min = 600, max = 10000)
+    @ConfigItem(keyName = "movementDelayMs", name = "Movement delay (ms)",
+            description = "Minimum delay between movement attempts; existing movement is allowed to finish", position = 16)
+    default int movementDelayMs() { return 2000; }
+
+    @Range(min = 0, max = 16383)
+    @ConfigItem(keyName = "entranceX", name = "Outside entrance X",
+            description = "World X coordinate to walk to when outside the crab rooms", position = 17)
+    default int entranceX() { return 1274; }
+
+    @Range(min = 0, max = 16383)
+    @ConfigItem(keyName = "entranceY", name = "Outside entrance Y",
+            description = "World Y coordinate to walk to when outside the crab rooms", position = 18)
+    default int entranceY() { return 3168; }
+
+    @Range(min = 0, max = 3)
+    @ConfigItem(keyName = "entrancePlane", name = "Outside entrance plane",
+            description = "World plane of the outside entrance; ground level is 0", position = 19)
+    default int entrancePlane() { return 0; }
+
     @ConfigItem(keyName = "food", name = "Food",
             description = "Comma-separated exact food names; blank disables eating", position = 20)
     default String food() { return "Lobster"; }
