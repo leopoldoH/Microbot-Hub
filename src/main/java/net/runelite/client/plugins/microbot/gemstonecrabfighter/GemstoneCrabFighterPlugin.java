@@ -22,7 +22,7 @@ import javax.inject.Inject;
         version = GemstoneCrabFighterPlugin.version,
         minClientVersion = "2.6.22")
 public class GemstoneCrabFighterPlugin extends Plugin {
-    public static final String version = "1.3.1";
+    public static final String version = "1.3.2";
     @Inject private GemstoneCrabFighterConfig config;
     @Inject private Client client;
     @Inject private OverlayManager overlayManager;

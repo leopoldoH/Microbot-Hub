@@ -63,6 +63,9 @@ public class GemstoneCrabFighterScript extends StateMachineScript<GemstoneCrabSt
     private long lootCycleDeadline;
     private long crabWaitDeadline;
     private int interactionFailures;
+    private int crawlAttempts;
+    private int walkFailures;
+    private long nextMovementAttemptAt;
 
     public GemstoneCrabFighterScript(GemstoneCrabFighterConfig config) {
         this.config = config;
@@ -204,15 +207,24 @@ public class GemstoneCrabFighterScript extends StateMachineScript<GemstoneCrabSt
     }
 
     private void walkToCave() {
+        if (player.isMoving() || System.nanoTime() < nextMovementAttemptAt) return;
         if (findCrab() != null || findEntrance() != null) {
             routeToEncounter();
             return;
         }
-        Rs2Walker.walkTo(OUTSIDE_CAVE);
+        boolean reached = Rs2Walker.walkTo(OUTSIDE_CAVE);
+        nextMovementAttemptAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        if (reached || findCrab() != null || findEntrance() != null) {
+            walkFailures = 0;
+        } else if (++walkFailures >= 3) {
+            stop("Cave route failed three times; check blocked tiles or the current location");
+            return;
+        }
         routeToEncounter();
     }
 
     private void enterCave() {
+        if (player.isMoving() || System.nanoTime() < nextMovementAttemptAt) return;
         if (findCrab() != null) {
             next(GemstoneCrabState.FINDING_CRAB, "Crab found before crawling");
             return;
@@ -222,11 +234,7 @@ public class GemstoneCrabFighterScript extends StateMachineScript<GemstoneCrabSt
             next(GemstoneCrabState.WALKING_TO_CAVE, "Crawl-through not visible");
             return;
         }
-        if (!entrance.click("Crawl-through")) {
-            if (++interactionFailures >= 3) stop("Could not use the crab cave crawl-through");
-            return;
-        }
-        interactionFailures = 0;
+        if (!dispatchCrawl(entrance)) return;
         crabWaitDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(config.crabWaitTimeout());
         next(GemstoneCrabState.WAITING_FOR_CRAB, "Entered a crab room");
     }
@@ -277,6 +285,9 @@ public class GemstoneCrabFighterScript extends StateMachineScript<GemstoneCrabSt
 
     private void maybeBeginPeriodicLoot() {
         GemstoneCrabState state = getCurrentState();
+        // A loot scan must not interrupt an outstanding movement interaction.
+        if (state != GemstoneCrabState.IN_COMBAT && state != GemstoneCrabState.FINDING_CRAB
+                && state != GemstoneCrabState.ATTACKING) return;
         if (!config.periodicLooting() || state == null || state == GemstoneCrabState.INITIALIZING
                 || state == GemstoneCrabState.HEALING || state == GemstoneCrabState.LOOTING_ITEMS
                 || state == GemstoneCrabState.STOPPED || System.nanoTime() < nextLootCheckAt) return;
@@ -339,29 +350,43 @@ public class GemstoneCrabFighterScript extends StateMachineScript<GemstoneCrabSt
     }
 
     private void switchCrab() {
+        if (player.isMoving() || System.nanoTime() < nextMovementAttemptAt) return;
         Rs2TileObjectModel entrance = findEntrance();
         if (entrance == null) {
             if (++interactionFailures >= 3) stop("No crawl-through available after the kill");
             return;
         }
-        if (!entrance.click("Crawl-through")) {
-            if (++interactionFailures >= 3) stop("Could not move to the next crab");
-            return;
-        }
-        interactionFailures = 0;
-        crabDeathObserved = false;
-        finalSweepCompleted = false;
+        if (!dispatchCrawl(entrance)) return;
         crabWaitDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(config.crabWaitTimeout());
         next(GemstoneCrabState.WAITING_FOR_CRAB, "Moved to the next crab room");
     }
 
+    private boolean dispatchCrawl(Rs2TileObjectModel entrance) {
+        if (crawlAttempts >= 3) {
+            stop("Crawl-through failed to reach a live crab after three attempts");
+            return false;
+        }
+        crawlAttempts++;
+        nextMovementAttemptAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        return entrance.click("Crawl-through");
+    }
+
     private void waitForCrab() {
-        if (findCrab() != null) {
+        if (findCrab() != null && findRemains() == null) {
             interactionFailures = 0;
+            crawlAttempts = 0;
+            crabDeathObserved = false;
+            finalSweepCompleted = false;
             next(GemstoneCrabState.FINDING_CRAB, "Next gemstone crab available");
         } else if (System.nanoTime() >= crabWaitDeadline) {
-            next(findEntrance() == null ? GemstoneCrabState.WALKING_TO_CAVE : GemstoneCrabState.ENTERING_CAVE,
-                    "No crab appeared before the wait timeout");
+            if (crawlAttempts >= 3) {
+                stop("No live crab appeared after three crawl-through attempts");
+            } else {
+                next(crabDeathObserved || findRemains() != null ? GemstoneCrabState.SWITCHING_CRAB
+                                : findEntrance() == null ? GemstoneCrabState.WALKING_TO_CAVE
+                                : GemstoneCrabState.ENTERING_CAVE,
+                        "Crawl-through unconfirmed; retrying with a fresh entrance lookup");
+            }
         }
     }
 
