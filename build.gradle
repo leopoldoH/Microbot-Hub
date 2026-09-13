@@ -107,6 +107,8 @@ repositories {
 }
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
+
     if (microbotClientPath) {
         def clientFile = file(microbotClientPath)
         if (!clientFile.exists()) {
@@ -209,12 +211,25 @@ afterEvaluate {
     // Configure test source set to have access to all plugin source sets
     def allPluginCompileTasks = []
 
+    // Plugin source sets are the authoritative test inputs. Keeping the default
+    // main output here makes targeted tests compile every Hub plugin first.
+    sourceSets.test.compileClasspath = configurations.testCompileClasspath
+    sourceSets.test.runtimeClasspath = sourceSets.test.output + configurations.testRuntimeClasspath
+
+    if (pluginsProperty) {
+        sourceSets.test.java.setIncludes(validPlugins.collect { plugin ->
+            "${project.ext.getPluginsIncludePath()}/${plugin.dir.name}/**"
+        })
+    }
+
     validPlugins.each { plugin ->
         def compileTaskName = "compile${plugin.sourceSetName.capitalize()}Java"
 
         if (sourceSets.findByName(plugin.sourceSetName)) {
-            sourceSets.test.compileClasspath += sourceSets."${plugin.sourceSetName}".output
-            sourceSets.test.runtimeClasspath += sourceSets."${plugin.sourceSetName}".output
+            // Put selected plugin classes before the client JAR. A developer's
+            // local client artifact can otherwise shadow a newer plugin class.
+            sourceSets.test.compileClasspath = sourceSets."${plugin.sourceSetName}".output + sourceSets.test.compileClasspath
+            sourceSets.test.runtimeClasspath = sourceSets."${plugin.sourceSetName}".output + sourceSets.test.runtimeClasspath
 
             allPluginCompileTasks.add(compileTaskName)
 
